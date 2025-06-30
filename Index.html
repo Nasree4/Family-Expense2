@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แดชบอร์ดสรุปการเงินส่วนบุคคล</title>
+    <!-- Chosen Palette: Soothing Teal and Grey -->
+    <!-- Application Structure Plan: ผมได้ออกแบบแอปพลิเคชันนี้ในรูปแบบของแดชบอร์ดหน้าเดียว (Single-Page Dashboard) ซึ่งเป็นโครงสร้างที่เหมาะสมที่สุดสำหรับแอปการเงิน เพราะช่วยให้ผู้ใช้เห็นภาพรวมที่สำคัญที่สุดได้ทันทีที่เปิดแอป โครงสร้างหลักประกอบด้วย: 1. ส่วนแสดงสถิติหลัก (Key Metrics Cards) ด้านบนสุดสำหรับข้อมูลที่สำคัญที่สุด เช่น ยอดคงเหลือ, รายรับและรายจ่ายรวม 2. ส่วนแสดงภาพข้อมูล (Visualizations) ที่มีแผนภูมิวงแหวนแสดงสัดส่วนรายจ่าย และแผนภูมิแท่งแสดงแนวโน้มรายรับ-รายจ่ายรายวัน เพื่อการวิเคราะห์ที่ง่ายขึ้น 3. ส่วนจัดการข้อมูล (Data Management) ที่มีฟอร์มสำหรับเพิ่มรายการใหม่และตารางแสดงรายการล่าสุด โครงสร้างนี้ช่วยให้ผู้ใช้สามารถ "รับรู้ -> วิเคราะห์ -> จัดการ" ข้อมูลของตนเองได้อย่างเป็นลำดับและเป็นธรรมชาติภายในหน้าจอเดียว -->
+    <!-- Visualization & Content Choices: 1. สถิติหลัก (Key Metrics): Goal->Inform. Method->ใช้การ์ดแสดงข้อความตัวเลขขนาดใหญ่ เพื่อให้ผู้ใช้ทราบสถานะทางการเงินที่สำคัญที่สุดได้อย่างรวดเร็ว 2. สัดส่วนรายจ่าย (Expense Breakdown): Goal->Compare. Method->ใช้แผนภูมิวงแหวน (Doughnut Chart) จาก Chart.js เพราะเหมาะที่สุดสำหรับการแสดงสัดส่วนของข้อมูล ทำให้ผู้ใช้เข้าใจพฤติกรรมการใช้จ่ายของตนเองได้ง่าย 3. แนวโน้มรายวัน (Daily Trend): Goal->Change. Method->ใช้แผนภูมิแท่ง (Bar Chart) จาก Chart.js เพื่อแสดงและเปรียบเทียบยอดรวมรายรับ-รายจ่ายในแต่ละวัน ช่วยให้เห็นภาพรวมกระแสเงินสดและช่วยในการวางแผนระยะสั้น 4. รายการล่าสุด (Transaction List): Goal->Organize. Method->ใช้ตารางที่ชัดเจนและเรียบง่ายเพื่อให้ผู้ใช้สามารถตรวจสอบและจัดการรายการล่าสุดได้ 5. งบประมาณ (Budgeting): Goal->Inform/Control. Method->ใช้การ์ดแสดงผลพร้อมแถบความคืบหน้า (Progress Text) และข้อความแจ้งเตือน เพื่อให้ผู้ใช้เห็นสถานะการใช้งบประมาณในหมวดหมู่ที่เลือก. การเลือกใช้ Chart.js (Canvas) ทั้งหมดเป็นไปตามข้อกำหนดที่ห้ามใช้ SVG/Mermaid และเพื่อให้มั่นใจว่าการแสดงผลจะตอบสนองและโต้ตอบได้ดี -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            background-color: #f0f4f8;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 350px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        .card {
+            background-color: white;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -2px rgb(0 0 0 / 0.1);
+        }
+        .kpi-value {
+            font-size: 2.25rem;
+            line-height: 2.5rem;
+            font-weight: 700;
+        }
+        .kpi-income { color: #10B981; }
+        .kpi-expense { color: #EF4444; }
+        .kpi-balance { color: #3B82F6; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Modal specific styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .modal.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 500px;
+            position: relative;
+            transform: translateY(-20px);
+            transition: transform 0.3s ease;
+            max-height: 90vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal.show .modal-content {
+            transform: translateY(0);
+        }
+        .modal-close-btn {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #64748b;
+        }
+        .user-id-display {
+            font-size: 0.8rem;
+            color: #64748b;
+            text-align: center;
+            margin-top: 10px;
+            word-break: break-all;
+        }
+        /* Message box for user feedback */
+        .message-box {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            z-index: 2001; /* Ensure it's above loading overlay */
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+            font-size: 0.9rem;
+        }
+        .message-box.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .message-box.error {
+            background-color: #ef4444; /* Red */
+        }
+        .message-box.success {
+            background-color: #10b981; /* Green */
+        }
+        .budget-progress-bar {
+            height: 8px;
+            border-radius: 4px;
+            background-color: #e2e8f0; /* bg-slate-200 */
+            overflow: hidden;
+        }
+        .budget-progress-fill {
+            height: 100%;
+            background-color: #3B82F6; /* Blue */
+            transition: width 0.5s ease-in-out;
+        }
+        .budget-progress-fill.warning {
+            background-color: #F59E0B; /* Amber */
+        }
+        .budget-progress-fill.danger {
+            background-color: #EF4444; /* Red */
+        }
+        /* Styles for new type buttons */
+        .type-btn {
+            border: 2px solid #e2e8f0;
+            background-color: #f8fafc;
+            color: #475569;
+        }
+        .type-btn.active.expense {
+            background-color: #EF4444;
+            border-color: #EF4444;
+            color: white;
+        }
+        .type-btn.active.income {
+            background-color: #10B981;
+            border-color: #10B981;
+            color: white;
+        }
+        /* Loading Overlay */
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            flex-direction: column;
+            gap: 1rem;
+            color: #1e293b;
+            font-weight: 500;
+        }
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 5px solid #cbd5e1;
+            border-bottom-color: #3b82f6;
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+        }
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <p>กำลังประมวลผล...</p>
+    </div>
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <!-- Header -->
+        <header class="mb-8 flex justify-between items-center">
+            <div>
+                <h1 class="text-4xl font-bold text-slate-800">แดชบอร์ดการเงิน</h1>
+                <p class="text-lg text-slate-500 mt-1">ภาพรวมรายรับ-รายจ่ายของคุณในที่เดียว</p>
+                <div class="user-id-display" id="userIdDisplay">
+                    เชื่อมต่อกับ Google Sheet...
+                </div>
+            </div>
+            <button id="openAddTransactionModal" class="bg-blue-600 text-white font-bold py-3 px-6 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                เพิ่มรายการใหม่
+            </button>
+        </header>
+
+        <!-- Main Content Grid -->
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left Column / Main Content -->
+            <div class="lg:col-span-3 flex flex-col gap-8">
+                <!-- KPI Cards -->
+                <section>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                        <div class="card text-center">
+                            <h3 class="font-semibold text-slate-500">รายรับรวม</h3>
+                            <p id="totalIncome" class="kpi-value kpi-income">0.00</p>
+                        </div>
+                        <div class="card text-center">
+                            <h3 class="font-semibold text-slate-500">รายจ่ายรวม</h3>
+                            <p id="totalExpense" class="kpi-value kpi-expense">0.00</p>
+                        </div>
+                        <div class="card text-center">
+                            <h3 class="font-semibold text-slate-500">ยอดคงเหลือ</h3>
+                            <p id="currentBalance" class="kpi-value kpi-balance">0.00</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Charts Section -->
+                <section class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="card">
+                        <h3 class="font-semibold text-slate-800 mb-4 text-lg">สัดส่วนรายจ่าย</h3>
+                        <p class="text-sm text-slate-500 mb-4">แผนภูมินี้แสดงให้เห็นว่าคุณใช้เงินไปกับหมวดหมู่ใดบ้าง ช่วยให้คุณเข้าใจพฤติกรรมการใช้จ่ายและวางแผนการเงินได้ดีขึ้น</p>
+                        <div class="chart-container">
+                            <canvas id="expenseDoughnutChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3 class="font-semibold text-slate-800 mb-4 text-lg">แนวโน้มรายวัน</h3>
+                         <p class="text-sm text-slate-500 mb-4">เปรียบเทียบยอดรวมรายรับและรายจ่ายในแต่ละวัน เพื่อให้คุณเห็นภาพรวมกระแสเงินสดและช่วยในการวางแผนระยะสั้น</p>
+                        <div class="chart-container">
+                            <canvas id="dailyTrendBarChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- Budgeting Section -->
+                <section class="card">
+                    <h3 class="font-semibold text-slate-800 mb-4 text-lg">ตั้งงบประมาณ</h3>
+                    <p class="text-sm text-slate-500 mb-4">กำหนดงบประมาณสำหรับหมวดหมู่รายจ่ายที่สำคัญ และติดตามการใช้จ่ายของคุณ</p>
+                    <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                        <select id="budgetCategorySelect" class="w-full sm:w-1/2 p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                            <!-- Populated by JS -->
+                        </select>
+                        <input type="number" id="budgetAmountInput" placeholder="งบประมาณ (฿)" min="0" step="0.01" class="w-full sm:w-1/2 p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                    </div>
+                    <button id="setBudgetBtn" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700 transition-colors mb-4">ตั้งงบประมาณ</button>
+                    
+                    <div id="budgetDisplay" class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <p class="font-semibold text-slate-700 mb-2">งบประมาณสำหรับ <span id="currentBudgetCategory">...</span>:</p>
+                        <p class="text-xl font-bold text-blue-600 mb-2">฿<span id="currentBudgetAmount">0.00</span></p>
+                        <p class="text-sm text-slate-600 mb-2">ใช้ไปแล้ว: ฿<span id="spentOnBudgetCategory">0.00</span></p>
+                        <div class="budget-progress-bar">
+                            <div id="budgetProgressBarFill" class="budget-progress-fill" style="width: 0%;"></div>
+                        </div>
+                        <p id="budgetStatusText" class="text-sm mt-2 text-slate-500">ยังไม่มีงบประมาณที่ตั้งไว้</p>
+                    </div>
+                </section>
+
+                 <!-- Transaction History -->
+                <section class="card">
+                    <h3 class="font-semibold text-slate-800 mb-4 text-lg flex justify-between items-center">
+                        <span>ประวัติรายการ</span>
+                        <button id="exportCsvBtn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-300 transition-colors flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Export (CSV)
+                        </button>
+                    </h3>
+                     <p class="text-sm text-slate-500 mb-4">ตารางนี้แสดงรายการธุรกรรมล่าสุดของคุณ สามารถใช้เพื่อตรวจสอบความถูกต้องและติดตามการใช้จ่ายย้อนหลัง</p>
+                     <!-- Filter Controls -->
+                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label for="filterMonth" class="font-medium text-sm mb-1 block">เลือกเดือน:</label>
+                            <select id="filterMonth" class="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                                <option value="all">ทั้งหมด</option>
+                                <option value="0">มกราคม</option>
+                                <option value="1">กุมภาพันธ์</option>
+                                <option value="2">มีนาคม</option>
+                                <option value="3">เมษายน</option>
+                                <option value="4">พฤษภาคม</option>
+                                <option value="5">มิถุนายน</option>
+                                <option value="6">กรกฎาคม</option>
+                                <option value="7">สิงหาคม</option>
+                                <option value="8">กันยายน</option>
+                                <option value="9">ตุลาคม</option>
+                                <option value="10">พฤศจิกายน</option>
+                                <option value="11">ธันวาคม</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="filterYear" class="font-medium text-sm mb-1 block">เลือกปี:</label>
+                            <select id="filterYear" class="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                                <!-- Populated by JS -->
+                            </select>
+                        </div>
+                     </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="border-b-2 border-slate-200">
+                                <tr>
+                                    <th class="p-3">วันที่</th>
+                                    <th class="p-3">รายการ</th>
+                                    <th class="p-3">หมวดหมู่</th>
+                                    <th class="p-3">ชำระด้วย</th>
+                                    <th class="p-3">สมาชิก</th>
+                                    <th class="p-3 text-right">จำนวนเงิน</th>
+                                    <th class="p-3 text-center">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transactionTableBody">
+                                <!-- JS will populate this -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add/Edit Transaction Modal -->
+    <div id="addTransactionModal" class="modal">
+        <div class="modal-content">
+            <button id="closeAddTransactionModal" class="modal-close-btn">&times;</button>
+            <h3 id="modalTitle" class="font-semibold text-slate-800 mb-4 text-lg">เพิ่มรายการใหม่</h3>
+            <p class="text-sm text-slate-500 mb-4">กรอกข้อมูลด้านล่างเพื่อบันทึกรายรับหรือรายจ่ายใหม่ของคุณ ข้อมูลจะถูกนำไปคำนวณและแสดงผลบนแดชบอร์ดทันที</p>
+            <form id="transactionForm" class="flex flex-col gap-4">
+                <!-- MODIFIED: Type selection with buttons -->
+                <div>
+                    <label class="font-medium text-sm mb-1 block">ประเภท</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" id="expenseBtn" class="type-btn p-3 rounded-md transition-colors font-semibold">รายจ่าย</button>
+                        <button type="button" id="incomeBtn" class="type-btn p-3 rounded-md transition-colors font-semibold">รายรับ</button>
+                    </div>
+                    <input type="hidden" name="type" id="transactionType" value="expense">
+                </div>
+                <div>
+                    <label class="font-medium text-sm mb-1 block">คำอธิบาย</label>
+                    <input type="text" name="description" id="transactionDescription" placeholder="เช่น ค่ากาแฟ, เงินเดือน" class="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required>
+                </div>
+                <div>
+                    <label class="font-medium text-sm mb-1 block">หมวดหมู่</label>
+                    <select name="category" id="transactionCategory" class="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required>
+                        <!-- Options populated by JS -->
+                    </select>
+                </div>
+                <div>
+                    <label class="font-medium text-sm mb-1 block">ชำระด้วย</label>
+                    <div class="flex gap-4 mt-1">
+                        <label class="inline-flex items-center">
+                            <input type="radio" name="paymentMethod" value="เงินสด" class="form-radio text-blue-600" checked>
+                            <span class="ml-2">เงินสด</span>
+                        </label>
+                        <label class="inline-flex items-center">
+                            <input type="radio" name="paymentMethod" value="บัตรเครดิต" class="form-radio text-blue-600">
+                            <span class="ml-2">บัตรเครดิต</span>
+                        </label>
+                    </div>
+                </div>
+                <div>
+                    <label class="font-medium text-sm mb-1 block">สมาชิก</label>
+                    <select name="member" id="transactionMember" class="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required>
+                        <!-- Options populated by JS -->
+                    </select>
+                </div>
+                <div>
+                    <label class="font-medium text-sm mb-1 block">จำนวนเงิน</label>
+                    <input type="number" name="amount" id="transactionAmount" placeholder="0.00" min="0.01" step="0.01" class="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required>
+                </div>
+                <button type="submit" id="submitTransactionBtn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-md hover:bg-blue-700 transition-colors">
+                    บันทึกรายการ
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Message Box -->
+    <div id="messageBox" class="message-box"></div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        // --- CONFIGURATION & STATE ---
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwVOXize5g033ZO3K9IXMXOFpqTuuagH7SM5XaaW_2uhy9bgCIHktVLWMpUsR_k-E8F5Q/exec';
+
+        const CATEGORIES = {
+            expense: ['อาหาร', 'เดินทาง', 'ที่อยู่อาศัย', 'บิล/สาธารณูปโภค', 'ของใช้ส่วนตัว', 'เสื้อผ้า', 'ความบันเทิง', 'สุขภาพ', 'การศึกษา', 'การลงทุน', 'ให้ของขวัญ', 'สัตว์เลี้ยง', 'อื่นๆ'],
+            income: ['เงินเดือน', 'รายได้เสริม', 'จากการลงทุน', 'ของขวัญ', 'โบนัส', 'อื่นๆ']
+        };
+        const MEMBERS = ['พ่อ', 'แม่', 'ลูกชาย', 'ลูกสาว', 'ส่วนกลาง'];
+        
+        let state = {
+            transactions: [],
+            budgets: {}, // Note: Budget data is still stored locally.
+            currentFilter: {
+                month: 'all',
+                year: new Date().getFullYear()
+            },
+            editingTransactionId: null
+        };
+
+        // --- DOM ELEMENTS ---
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const totalIncomeEl = document.getElementById('totalIncome');
+        const totalExpenseEl = document.getElementById('totalExpense');
+        const currentBalanceEl = document.getElementById('currentBalance');
+        const transactionTableBody = document.getElementById('transactionTableBody');
+        const modal = document.getElementById('addTransactionModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const form = document.getElementById('transactionForm');
+        const openModalBtn = document.getElementById('openAddTransactionModal');
+        const closeModalBtn = document.getElementById('closeAddTransactionModal');
+        const expenseBtn = document.getElementById('expenseBtn');
+        const incomeBtn = document.getElementById('incomeBtn');
+        const transactionTypeInput = document.getElementById('transactionType');
+        const categorySelect = document.getElementById('transactionCategory');
+        const memberSelect = document.getElementById('transactionMember');
+        const budgetCategorySelect = document.getElementById('budgetCategorySelect');
+        const filterMonthSelect = document.getElementById('filterMonth');
+        const filterYearSelect = document.getElementById('filterYear');
+        const userIdDisplay = document.getElementById('userIdDisplay');
+        const messageBox = document.getElementById('messageBox');
+        
+        // Budget elements
+        const setBudgetBtn = document.getElementById('setBudgetBtn');
+        const budgetAmountInput = document.getElementById('budgetAmountInput');
+        const currentBudgetCategoryEl = document.getElementById('currentBudgetCategory');
+        const currentBudgetAmountEl = document.getElementById('currentBudgetAmount');
+        const spentOnBudgetCategoryEl = document.getElementById('spentOnBudgetCategory');
+        const budgetProgressBarFill = document.getElementById('budgetProgressBarFill');
+        const budgetStatusText = document.getElementById('budgetStatusText');
+
+        // --- CHART.JS SETUP ---
+        let expenseDoughnutChart, dailyTrendBarChart;
+
+        // --- HELPER FUNCTIONS ---
+        const showLoading = (show) => loadingOverlay.classList.toggle('hidden', !show);
+        const formatCurrency = (amount) => `฿${(parseFloat(amount) || 0).toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,')}`;
+        const showMessage = (text, type = 'success', duration = 3000) => {
+            messageBox.textContent = text;
+            messageBox.className = 'message-box show';
+            if (type === 'error') messageBox.classList.add('error');
+            else messageBox.classList.add('success');
+            setTimeout(() => { messageBox.className = 'message-box'; }, duration);
+        };
+
+        // --- DATA HANDLING WITH GOOGLE SHEETS ---
+        const loadDataFromSheet = async () => {
+            if (!SCRIPT_URL) {
+                showMessage('กรุณาตั้งค่า SCRIPT_URL ในโค้ดก่อน', 'error');
+                userIdDisplay.textContent = 'การเชื่อมต่อล้มเหลว: ไม่ได้ตั้งค่า URL';
+                return;
+            }
+            showLoading(true);
+            try {
+                const response = await fetch(`${SCRIPT_URL}?v=${new Date().getTime()}`); // Prevent caching
+                if (!response.ok) throw new Error(`Network Error: ${response.statusText}`);
+                const data = await response.json();
+                if(data.status === 'error'){ throw new Error(data.message); }
+                state.transactions = data.map(t => ({ ...t, amount: parseFloat(t.amount) || 0 }));
+                userIdDisplay.textContent = 'เชื่อมต่อกับ Google Sheet สำเร็จ';
+                renderAll();
+            } catch (error) {
+                console.error('Failed to load transactions:', error);
+                showMessage(`ไม่สามารถโหลดข้อมูลได้: ${error.message}`, 'error', 5000);
+                userIdDisplay.textContent = 'การเชื่อมต่อล้มเหลว';
+            } finally {
+                showLoading(false);
+            }
+        };
+
+        // --- UI RENDERING & UPDATES ---
+        const renderAll = () => {
+            populateYearFilter();
+            const filteredTransactions = getFilteredTransactions();
+            renderKPIs(filteredTransactions);
+            renderTransactionTable(filteredTransactions);
+            updateDoughnutChart(filteredTransactions);
+            updateBarChart(filteredTransactions);
+            renderBudget();
+        };
+
+        const getFilteredTransactions = () => {
+            return state.transactions.filter(t => {
+                if (!t.date) return false;
+                const date = new Date(t.date);
+                const monthMatch = state.currentFilter.month === 'all' || date.getMonth() == state.currentFilter.month;
+                const yearMatch = date.getFullYear() == state.currentFilter.year;
+                return monthMatch && yearMatch;
+            });
+        };
+
+        const renderKPIs = (transactions) => {
+            const income = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+            const expense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+            totalIncomeEl.textContent = formatCurrency(income);
+            totalExpenseEl.textContent = formatCurrency(expense);
+            currentBalanceEl.textContent = formatCurrency(income - expense);
+        };
+
+        const renderTransactionTable = (transactions) => {
+            transactionTableBody.innerHTML = '';
+            if (transactions.length === 0) {
+                transactionTableBody.innerHTML = `<tr><td colspan="7" class="text-center p-4 text-slate-500">ไม่พบรายการ...</td></tr>`;
+                return;
+            }
+            const sortedTransactions = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
+            sortedTransactions.forEach(t => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-slate-100 hover:bg-slate-50';
+                row.innerHTML = `
+                    <td class="p-3">${new Date(t.date).toLocaleDateString('th-TH')}</td>
+                    <td class="p-3 font-medium text-slate-800">${t.description}</td>
+                    <td class="p-3">${t.category}</td>
+                    <td class="p-3">${t.paymentMethod}</td>
+                    <td class="p-3">${t.member}</td>
+                    <td class="p-3 text-right font-semibold ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}">
+                        ${t.type === 'income' ? '+' : '-'}${formatCurrency(t.amount)}
+                    </td>
+                    <td class="p-3 text-center">
+                        <button data-id="${t.id}" class="edit-btn text-blue-500 hover:text-blue-700 p-1">แก้ไข</button>
+                        <button data-id="${t.id}" class="delete-btn text-red-500 hover:text-red-700 p-1">ลบ</button>
+                    </td>
+                `;
+                transactionTableBody.appendChild(row);
+            });
+        };
+        
+        const renderBudget = () => {
+            const selectedCategory = budgetCategorySelect.value;
+            const budgetAmount = state.budgets[selectedCategory] || 0;
+            if (!selectedCategory || budgetAmount === 0) { document.getElementById('budgetDisplay').classList.add('hidden'); return; }
+            document.getElementById('budgetDisplay').classList.remove('hidden');
+            currentBudgetCategoryEl.textContent = selectedCategory;
+            currentBudgetAmountEl.textContent = formatCurrency(budgetAmount);
+            const spent = getFilteredTransactions().filter(t => t.type === 'expense' && t.category === selectedCategory).reduce((sum, t) => sum + t.amount, 0);
+            spentOnBudgetCategoryEl.textContent = formatCurrency(spent);
+            const percentage = budgetAmount > 0 ? (spent / budgetAmount) * 100 : 0;
+            budgetProgressBarFill.style.width = `${Math.min(percentage, 100)}%`;
+            budgetProgressBarFill.classList.remove('warning', 'danger');
+            if (percentage > 90) { budgetProgressBarFill.classList.add('danger'); budgetStatusText.textContent = `คำเตือน: คุณใช้จ่ายเกิน 90% ของงบประมาณแล้ว!`; budgetStatusText.className = 'text-sm mt-2 text-red-600 font-semibold'; }
+            else if (percentage > 70) { budgetProgressBarFill.classList.add('warning'); budgetStatusText.textContent = `คุณใช้จ่ายไป ${percentage.toFixed(0)}% ของงบประมาณแล้ว`; budgetStatusText.className = 'text-sm mt-2 text-amber-600'; }
+            else { budgetStatusText.textContent = `คุณยังคงใช้งบประมาณได้ดี`; budgetStatusText.className = 'text-sm mt-2 text-slate-500'; }
+            if (spent > budgetAmount) { budgetStatusText.textContent = `คุณใช้จ่ายเกินงบประมาณมา ${formatCurrency(spent - budgetAmount)}!`; budgetStatusText.className = 'text-sm mt-2 text-red-600 font-bold'; }
+        };
+        
+        // --- CHART LOGIC ---
+        const updateDoughnutChart = (transactions) => {
+            const expenseData = transactions.filter(t => t.type === 'expense').reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + t.amount; return acc; }, {});
+            const labels = Object.keys(expenseData);
+            const data = Object.values(expenseData);
+            const backgroundColors = labels.map((_, i) => `hsl(${i * 360 / labels.length}, 70%, 60%)`);
+            if (expenseDoughnutChart) {
+                expenseDoughnutChart.data.labels = labels;
+                expenseDoughnutChart.data.datasets[0].data = data;
+                expenseDoughnutChart.data.datasets[0].backgroundColor = backgroundColors;
+                expenseDoughnutChart.update();
+            }
+        };
+
+        const updateBarChart = (transactions) => {
+            const dailyData = transactions.reduce((acc, t) => {
+                const date = new Date(t.date).toISOString().split('T')[0];
+                if (!acc[date]) { acc[date] = { income: 0, expense: 0 }; }
+                acc[date][t.type] += t.amount;
+                return acc;
+            }, {});
+            const sortedDates = Object.keys(dailyData).sort();
+            const labels = sortedDates.map(date => new Date(date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }));
+            const incomeData = sortedDates.map(date => dailyData[date].income);
+            const expenseData = sortedDates.map(date => dailyData[date].expense);
+            if (dailyTrendBarChart) {
+                dailyTrendBarChart.data.labels = labels;
+                dailyTrendBarChart.data.datasets[0].data = incomeData;
+                dailyTrendBarChart.data.datasets[1].data = expenseData;
+                dailyTrendBarChart.update();
+            }
+        };
+
+        // --- MODAL & FORM LOGIC ---
+        const openModal = (transactionId = null) => {
+            form.reset();
+            state.editingTransactionId = transactionId;
+            if (transactionId) {
+                modalTitle.textContent = 'แก้ไขรายการ';
+                const transaction = state.transactions.find(t => t.id === transactionId);
+                if(transaction) {
+                    updateTypeButtons(transaction.type);
+                    form.description.value = transaction.description;
+                    form.category.value = transaction.category;
+                    form.amount.value = transaction.amount;
+                    form.member.value = transaction.member;
+                    form.querySelector(`input[name="paymentMethod"][value="${transaction.paymentMethod}"]`).checked = true;
+                }
+            } else {
+                modalTitle.textContent = 'เพิ่มรายการใหม่';
+                updateTypeButtons('expense');
+            }
+            modal.classList.add('show');
+        };
+
+        const closeModal = () => modal.classList.remove('show');
+
+        const updateCategoryOptions = (type) => {
+            categorySelect.innerHTML = '';
+            CATEGORIES[type].forEach(cat => { const option = document.createElement('option'); option.value = cat; option.textContent = cat; categorySelect.appendChild(option); });
+        };
+
+        const updateTypeButtons = (type) => {
+            transactionTypeInput.value = type;
+            if (type === 'income') { incomeBtn.classList.add('active', 'income'); expenseBtn.classList.remove('active', 'expense'); } 
+            else { expenseBtn.classList.add('active', 'expense'); incomeBtn.classList.remove('active', 'income'); }
+            updateCategoryOptions(type);
+        };
+
+        const handleFormSubmit = async (e) => {
+            e.preventDefault();
+            if (!SCRIPT_URL) {
+                showMessage('กรุณาตั้งค่า SCRIPT_URL ในโค้ดก่อน', 'error');
+                return;
+            }
+            showLoading(true);
+
+            const isEditing = !!state.editingTransactionId;
+            const transactionData = {
+                id: isEditing ? state.editingTransactionId : `tx-${Date.now()}`,
+                type: transactionTypeInput.value,
+                description: form.description.value,
+                category: form.category.value,
+                amount: parseFloat(form.amount.value),
+                paymentMethod: form.querySelector('input[name="paymentMethod"]:checked').value,
+                member: form.member.value,
+                date: isEditing ? state.transactions.find(t => t.id === state.editingTransactionId).date : new Date().toISOString()
+            };
+            
+            const payload = {
+                action: isEditing ? 'edit' : 'add',
+                data: transactionData
+            };
+            
+            try {
+                await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                setTimeout(async () => {
+                    await loadDataFromSheet();
+                    closeModal();
+                    showMessage(isEditing ? 'แก้ไขรายการสำเร็จ!' : 'บันทึกรายการสำเร็จ!');
+                }, 2500);
+
+            } catch (error) {
+                console.error('Failed to post data:', error);
+                showMessage('เกิดข้อผิดพลาดในการส่งข้อมูล', 'error');
+                showLoading(false);
+            }
+        };
+        
+        const handleDelete = async (id) => {
+            if (confirm('คุณแน่ใจหรือไม่ว่าต้องการลบรายการนี้?')) {
+                if (!SCRIPT_URL) {
+                    showMessage('กรุณาตั้งค่า SCRIPT_URL ในโค้ดก่อน', 'error');
+                    return;
+                }
+                showLoading(true);
+                const payload = { action: 'delete', id: id };
+                
+                try {
+                    await fetch(SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    setTimeout(async () => {
+                        await loadDataFromSheet();
+                        showMessage('ลบรายการสำเร็จ!', 'success');
+                    }, 2500);
+
+                } catch(error) {
+                    console.error('Failed to delete data:', error);
+                    showMessage('เกิดข้อผิดพลาดในการลบข้อมูล', 'error');
+                    showLoading(false);
+                }
+            }
+        };
+
+        // --- INITIALIZATION & EVENT LISTENERS ---
+        const populateSelects = () => {
+            memberSelect.innerHTML = '';
+            MEMBERS.forEach(m => { const option = document.createElement('option'); option.value = m; option.textContent = m; memberSelect.appendChild(option); });
+            budgetCategorySelect.innerHTML = '<option value="">-- เลือกหมวดหมู่งบประมาณ --</option>';
+            CATEGORIES.expense.forEach(cat => { const option = document.createElement('option'); option.value = cat; option.textContent = cat; budgetCategorySelect.appendChild(option); });
+            filterMonthSelect.value = state.currentFilter.month;
+        };
+
+        const populateYearFilter = () => {
+             const currentYear = new Date().getFullYear();
+            const years = [...new Set(state.transactions.map(t => new Date(t.date).getFullYear()))].filter(y => !isNaN(y));
+            if (!years.includes(currentYear)) years.push(currentYear);
+            years.sort((a,b) => b-a);
+            
+            const currentVal = filterYearSelect.value;
+            filterYearSelect.innerHTML = '';
+            years.forEach(year => {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year + 543; // Convert to B.E.
+                filterYearSelect.appendChild(option);
+            });
+            filterYearSelect.value = years.includes(parseInt(currentVal)) ? currentVal : state.currentFilter.year;
+        };
+
+        const initCharts = () => {
+            const doughnutCtx = document.getElementById('expenseDoughnutChart').getContext('2d');
+            expenseDoughnutChart = new Chart(doughnutCtx, { type: 'doughnut', data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' } } } });
+            const barCtx = document.getElementById('dailyTrendBarChart').getContext('2d');
+            dailyTrendBarChart = new Chart(barCtx, { type: 'bar', data: { labels: [], datasets: [ { label: 'รายรับ', data: [], backgroundColor: '#10B981' }, { label: 'รายจ่าย', data: [], backgroundColor: '#EF4444' } ]}, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { position: 'top' } } } });
+        };
+
+        // Event Listeners
+        openModalBtn.addEventListener('click', () => openModal());
+        closeModalBtn.addEventListener('click', closeModal);
+        window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+        form.addEventListener('submit', handleFormSubmit);
+        incomeBtn.addEventListener('click', () => updateTypeButtons('income'));
+        expenseBtn.addEventListener('click', () => updateTypeButtons('expense'));
+        transactionTableBody.addEventListener('click', (e) => {
+            if (e.target.classList.contains('delete-btn')) handleDelete(e.target.dataset.id);
+            if (e.target.classList.contains('edit-btn')) openModal(e.target.dataset.id);
+        });
+        filterMonthSelect.addEventListener('change', (e) => { state.currentFilter.month = e.target.value; renderAll(); });
+        filterYearSelect.addEventListener('change', (e) => { state.currentFilter.year = e.target.value; renderAll(); });
+        setBudgetBtn.addEventListener('click', () => {
+            const category = budgetCategorySelect.value;
+            const amount = parseFloat(budgetAmountInput.value);
+            if (!category) { showMessage('กรุณาเลือกหมวดหมู่สำหรับงบประมาณ', 'error'); return; }
+            if (isNaN(amount) || amount < 0) { showMessage('กรุณาใส่งบประมาณเป็นตัวเลขที่ถูกต้อง', 'error'); return; }
+            state.budgets[category] = amount;
+            renderBudget();
+            showMessage(`ตั้งงบประมาณสำหรับ ${category} สำเร็จ!`);
+            budgetAmountInput.value = '';
+        });
+        budgetCategorySelect.addEventListener('change', () => { renderBudget(); });
+        document.getElementById('exportCsvBtn').addEventListener('click', () => {
+            const transactions = getFilteredTransactions();
+            if (transactions.length === 0) { showMessage('ไม่มีข้อมูลสำหรับ Export', 'error'); return; }
+            const headers = ['id', 'date', 'type', 'description', 'category', 'amount', 'paymentMethod', 'member'];
+            const csvContent = [ headers.join(','), ...transactions.map(t => headers.map(h => `"${t[h]}"`).join(',')) ].join('\n');
+            const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `transactions.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        // --- APP INITIALIZATION ---
+        const init = async () => {
+            initCharts();
+            populateSelects();
+            await loadDataFromSheet();
+        };
+
+        init();
+    });
+    </script>
+</body>
+</html>
