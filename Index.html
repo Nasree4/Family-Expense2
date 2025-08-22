@@ -865,6 +865,15 @@
         expenseBtn.addEventListener('click', () => updateTypeButtons('expense'));
         incomeBtn.addEventListener('click', () => updateTypeButtons('income'));
 
+        transactionTableBody.addEventListener('click', (e) => {
+            if (e.target.classList.contains('edit-btn')) {
+                openTransactionModal(e.target.dataset.id);
+            }
+            if (e.target.classList.contains('delete-btn')) {
+                // Add handleDelete logic here if needed
+            }
+        });
+
         transactionForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const isEditing = !!state.editingTransactionId;
