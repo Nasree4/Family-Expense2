@@ -198,6 +198,21 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        /* Custom scrollbar for horizontal daily summary */
+        #dailySummaryContainer::-webkit-scrollbar {
+            height: 6px;
+        }
+        #dailySummaryContainer::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        #dailySummaryContainer::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        #dailySummaryContainer::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
     </style>
 </head>
 <body>
@@ -241,6 +256,14 @@
         <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <!-- Left Column / Main Content -->
             <div class="lg:col-span-3 flex flex-col gap-8">
+                <!-- Daily Summary Section -->
+                <section class="card">
+                    <h3 class="font-semibold text-slate-800 mb-4 text-lg">สรุปยอดประจำวัน</h3>
+                    <div id="dailySummaryContainer" class="flex overflow-x-auto space-x-4 pb-4">
+                        <!-- Daily summary cards will be injected here by JS -->
+                    </div>
+                </section>
+
                 <!-- KPI Cards -->
                 <section>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -438,16 +461,26 @@
         const accountFilterEl = document.getElementById('accountFilter');
         const userIdDisplay = document.getElementById('userIdDisplay');
         const messageBox = document.getElementById('messageBox');
+        const dailySummaryContainer = document.getElementById('dailySummaryContainer');
 
         // Modals
         const addTransactionModal = document.getElementById('addTransactionModal');
         const goalsModal = document.getElementById('goalsModal');
         const recurringModal = document.getElementById('recurringModal');
         const reportsModal = document.getElementById('reportsModal');
+        
+        // Modal Buttons
+        const openAddTransactionModalBtn = document.getElementById('openAddTransactionModal');
+        const openGoalsModalBtn = document.getElementById('openGoalsModalBtn');
+        const openRecurringModalBtn = document.getElementById('openRecurringModalBtn');
+        const openReportsModalBtn = document.getElementById('openReportsModalBtn');
+        const expenseBtn = document.getElementById('expenseBtn');
+        const incomeBtn = document.getElementById('incomeBtn');
 
         // Forms
         const transactionForm = document.getElementById('transactionForm');
         const goalForm = document.getElementById('goalForm');
+        const goalsListEl = document.getElementById('goalsList');
         
         // --- CHART.JS SETUP ---
         let summaryDoughnutChart, expenseDoughnutChart, dailyTrendBarChart, monthlyCompareChart;
@@ -467,7 +500,7 @@
         const postData = async (payload) => {
             showLoading(true);
             try {
-                await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+                await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload), headers: {'Content-Type': 'text/plain;charset=utf-8'} });
                 localStorage.removeItem(CACHE_KEY);
                 return true;
             } catch (error) {
@@ -475,7 +508,10 @@
                 showMessage('เกิดข้อผิดพลาดในการส่งข้อมูล', 'error');
                 return false;
             } finally {
-                showLoading(false);
+                setTimeout(() => {
+                    fetchFreshData(false);
+                    showLoading(false);
+                }, 2500);
             }
         };
         
@@ -529,6 +565,8 @@
             renderKPIs(filteredTransactions);
             renderTransactionTable(filteredTransactions);
             updateAllCharts(filteredTransactions);
+            renderGoals();
+            renderDailySummary(filteredTransactions);
         };
 
         const getFilteredTransactions = () => {
@@ -580,10 +618,75 @@
                 transactionTableBody.appendChild(row);
             });
         };
+        
+        const renderGoals = () => {
+            goalsListEl.innerHTML = '';
+            if(state.goals.length === 0) {
+                goalsListEl.innerHTML = `<p class="text-slate-500 text-center">ยังไม่มีเป้าหมายการออม</p>`;
+                return;
+            }
+            state.goals.forEach(goal => {
+                const percentage = (goal.savedAmount / goal.targetAmount) * 100;
+                const goalEl = document.createElement('div');
+                goalEl.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="font-semibold">${goal.name}</span>
+                        <span class="text-sm text-slate-600">${formatCurrency(goal.savedAmount)} / ${formatCurrency(goal.targetAmount)}</span>
+                    </div>
+                    <div class="goal-progress-bar">
+                        <div class="goal-progress-fill" style="width: ${percentage}%;"></div>
+                    </div>
+                `;
+                goalsListEl.appendChild(goalEl);
+            });
+        };
+        
+        const renderDailySummary = (transactions) => {
+            dailySummaryContainer.innerHTML = '';
+            if (transactions.length === 0) {
+                dailySummaryContainer.innerHTML = `<p class="text-slate-500">ไม่พบข้อมูลในข่วงวันที่เลือก</p>`;
+                return;
+            }
+            const dailyData = transactions.reduce((acc, t) => {
+                const date = new Date(t.date).toISOString().split('T')[0];
+                if (!acc[date]) {
+                    acc[date] = { income: 0, expense: 0, dateObj: new Date(t.date) };
+                }
+                if (t.type === 'income') acc[date].income += t.amount;
+                else acc[date].expense += t.amount;
+                return acc;
+            }, {});
+            const sortedDates = Object.keys(dailyData).sort((a, b) => new Date(b) - new Date(a));
+            sortedDates.forEach(dateStr => {
+                const data = dailyData[dateStr];
+                const balance = data.income - data.expense;
+                const card = document.createElement('div');
+                card.className = 'flex-shrink-0 w-64 bg-slate-50 p-4 rounded-lg border border-slate-200';
+                const formattedDate = data.dateObj.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short' });
+                card.innerHTML = `
+                    <p class="font-bold text-slate-700">${formattedDate}</p>
+                    <div class="mt-2 space-y-1">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-slate-500">รายรับ:</span>
+                            <span class="font-semibold text-green-500">+${formatCurrency(data.income)}</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-slate-500">รายจ่าย:</span>
+                            <span class="font-semibold text-orange-500">-${formatCurrency(data.expense)}</span>
+                        </div>
+                        <hr class="my-1 border-slate-200">
+                        <div class="flex justify-between font-bold text-md">
+                            <span class="text-slate-600">ยอดรวม:</span>
+                            <span class="${balance >= 0 ? 'text-teal-600' : 'text-red-500'}">${balance >= 0 ? '+' : ''}${formatCurrency(balance)}</span>
+                        </div>
+                    </div>
+                `;
+                dailySummaryContainer.appendChild(card);
+            });
+        };
 
         // --- CHART LOGIC ---
         const updateAllCharts = (transactions) => {
-            // Summary Doughnut
             const income = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
             const expense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
             if (summaryDoughnutChart) {
@@ -591,15 +694,17 @@
                 summaryDoughnutChart.update();
             }
 
-            // Expense Doughnut
             const expenseData = transactions.filter(t => t.type === 'expense').reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + t.amount; return acc; }, {});
             if (expenseDoughnutChart) {
-                expenseDoughnutChart.data.labels = Object.keys(expenseData);
-                expenseDoughnutChart.data.datasets[0].data = Object.values(expenseData);
+                const labels = Object.keys(expenseData);
+                const data = Object.values(expenseData);
+                const PREDEFINED_COLORS = ['#14B8A6', '#F97316', '#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#6366F1', '#D946EF', '#EF4444', '#0EA5E9', '#65A30D'];
+                expenseDoughnutChart.data.labels = labels;
+                expenseDoughnutChart.data.datasets[0].data = data;
+                expenseDoughnutChart.data.datasets[0].backgroundColor = labels.map((_, i) => PREDEFINED_COLORS[i % PREDEFINED_COLORS.length]);
                 expenseDoughnutChart.update();
             }
 
-            // Daily Trend Bar
             const dailyData = transactions.reduce((acc, t) => {
                 const date = new Date(t.date).toISOString().split('T')[0];
                 if (!acc[date]) { acc[date] = { income: 0, expense: 0 }; }
@@ -616,8 +721,58 @@
         };
 
         // --- MODAL & FORM LOGIC ---
-        // ... (Implementation for all modals and forms would go here)
-        
+        const openTransactionModal = (transactionId = null) => {
+            transactionForm.reset();
+            state.editingTransactionId = transactionId;
+            
+            const accountSelect = transactionForm.querySelector('[name="account"]');
+            accountSelect.innerHTML = '';
+            state.accounts.forEach(acc => {
+                const option = document.createElement('option');
+                option.value = acc.name;
+                option.textContent = acc.name;
+                accountSelect.appendChild(option);
+            });
+
+            if (transactionId) {
+                document.getElementById('modalTitle').textContent = 'แก้ไขรายการ';
+                const t = state.transactions.find(t => t.id === transactionId);
+                if(t) {
+                    updateTypeButtons(t.type);
+                    transactionForm.description.value = t.description;
+                    transactionForm.account.value = t.account;
+                    transactionForm.category.value = t.category;
+                    transactionForm.amount.value = t.amount;
+                }
+            } else {
+                document.getElementById('modalTitle').textContent = 'เพิ่มรายการใหม่';
+                updateTypeButtons('expense');
+            }
+            addTransactionModal.classList.add('show');
+        };
+
+        const updateTypeButtons = (type) => {
+            const typeInput = transactionForm.querySelector('#transactionType');
+            const categorySelect = transactionForm.querySelector('[name="category"]');
+            typeInput.value = type;
+            
+            if (type === 'income') {
+                incomeBtn.classList.add('active', 'income');
+                expenseBtn.classList.remove('active', 'expense');
+            } else {
+                expenseBtn.classList.add('active', 'expense');
+                incomeBtn.classList.remove('active', 'income');
+            }
+            
+            categorySelect.innerHTML = '';
+            CATEGORIES[type].forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat;
+                categorySelect.appendChild(option);
+            });
+        };
+
         // --- INITIALIZATION & EVENT LISTENERS ---
         const populateAccountFilter = () => {
             accountFilterEl.innerHTML = '<option value="all">ทุกบัญชี</option>';
@@ -635,7 +790,17 @@
             summaryDoughnutChart = new Chart(summaryCtx, { type: 'doughnut', data: { labels: ['รายรับรวม', 'รายจ่ายรวม'], datasets: [{ data: [], backgroundColor: ['#22C55E', '#F97316'] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' } } } });
 
             const expenseCtx = document.getElementById('expenseDoughnutChart').getContext('2d');
-            expenseDoughnutChart = new Chart(expenseCtx, { type: 'doughnut', data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' } } } });
+            expenseDoughnutChart = new Chart(expenseCtx, { type: 'doughnut', data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' }, tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        const label = context.label || '';
+                        const value = context.raw || 0;
+                        const total = context.chart.getDatasetMeta(0).total || 1;
+                        const percentage = ((value / total) * 100).toFixed(2);
+                        return `${label}: ${formatCurrency(value)} (${percentage}%)`;
+                    }
+                }
+            } } } });
             
             const barCtx = document.getElementById('dailyTrendBarChart').getContext('2d');
             dailyTrendBarChart = new Chart(barCtx, { type: 'bar', data: { labels: [], datasets: [ 
@@ -665,17 +830,65 @@
             renderAll();
         });
         
-        document.getElementById('openAddTransactionModal').addEventListener('click', () => addTransactionModal.classList.add('show'));
-        document.getElementById('openGoalsModalBtn').addEventListener('click', () => goalsModal.classList.add('show'));
-        document.getElementById('openRecurringModalBtn').addEventListener('click', () => recurringModal.classList.add('show'));
-        document.getElementById('openReportsModalBtn').addEventListener('click', () => reportsModal.classList.add('show'));
+        openAddTransactionModalBtn.addEventListener('click', () => openTransactionModal());
+        openGoalsModalBtn.addEventListener('click', () => goalsModal.classList.add('show'));
+        openRecurringModalBtn.addEventListener('click', () => recurringModal.classList.add('show'));
+        openReportsModalBtn.addEventListener('click', () => reportsModal.classList.add('show'));
 
         document.querySelectorAll('.modal-close-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.target.closest('.modal').classList.remove('show');
-            });
+            btn.addEventListener('click', (e) => e.target.closest('.modal').classList.remove('show'));
         });
         
+        expenseBtn.addEventListener('click', () => updateTypeButtons('expense'));
+        incomeBtn.addEventListener('click', () => updateTypeButtons('income'));
+
+        transactionForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const isEditing = !!state.editingTransactionId;
+            const transactionData = {
+                id: isEditing ? state.editingTransactionId : `tx-${Date.now()}`,
+                date: isEditing ? state.transactions.find(t => t.id === state.editingTransactionId).date : new Date().toISOString(),
+                type: transactionForm.querySelector('#transactionType').value,
+                description: transactionForm.querySelector('[name="description"]').value,
+                amount: parseFloat(transactionForm.querySelector('[name="amount"]').value),
+                category: transactionForm.querySelector('[name="category"]').value,
+                account: transactionForm.querySelector('[name="account"]').value,
+            };
+            const payload = { sheetName: 'Transactions', action: isEditing ? 'edit' : 'add', data: transactionData };
+            const success = await postData(payload);
+            if (success) {
+                addTransactionModal.classList.remove('show');
+                showMessage(isEditing ? 'แก้ไขรายการสำเร็จ!' : 'บันทึกรายการสำเร็จ!');
+            }
+        });
+
+        goalForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const goalName = goalForm.querySelector('[name="name"]').value;
+            const targetAmount = parseFloat(goalForm.querySelector('[name="targetAmount"]').value);
+
+            if (!goalName || isNaN(targetAmount) || targetAmount <= 0) {
+                showMessage('กรุณากรอกข้อมูลให้ถูกต้อง', 'error');
+                return;
+            }
+
+            const goalData = {
+                id: `goal-${Date.now()}`,
+                name: goalName,
+                targetAmount: targetAmount,
+                savedAmount: 0,
+                createdAt: new Date().toISOString()
+            };
+
+            const payload = { sheetName: 'Goals', action: 'add', data: goalData };
+            const success = await postData(payload);
+            if (success) {
+                goalsModal.classList.remove('show');
+                showMessage('สร้างเป้าหมายใหม่สำเร็จ!');
+                goalForm.reset();
+            }
+        });
+
         // --- APP INITIALIZATION ---
         const init = async () => {
             initCharts();
