@@ -397,6 +397,26 @@
             </form>
         </div>
     </div>
+
+    <!-- Add To Goal Modal -->
+    <div id="addToGoalModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close-btn">&times;</button>
+            <h3 class="font-semibold text-slate-800 mb-4 text-lg">ออมเงินสำหรับ "<span id="addToGoalName"></span>"</h3>
+            <form id="addToGoalForm" class="flex flex-col gap-3">
+                <input type="hidden" name="goalId">
+                <div>
+                    <label class="font-medium text-sm mb-1 block">จำนวนเงิน</label>
+                    <input type="number" name="amount" placeholder="0.00" min="0.01" step="0.01" class="w-full p-2 border border-slate-300 rounded-md" required>
+                </div>
+                <div>
+                    <label class="font-medium text-sm mb-1 block">จากบัญชี</label>
+                    <select name="account" class="w-full p-2 border border-slate-300 rounded-md" required></select>
+                </div>
+                <button type="submit" class="w-full bg-teal-500 text-white font-bold py-2 px-4 rounded-md hover:bg-teal-600">ยืนยันการออม</button>
+            </form>
+        </div>
+    </div>
     
     <!-- Recurring Transactions Modal -->
     <div id="recurringModal" class="modal">
@@ -430,7 +450,7 @@
         const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
         const CATEGORIES = {
-            expense: ['อาหาร', 'เดินทาง', 'ที่อยู่อาศัย', 'บิล/สาธารณูปโภค', 'ของใช้ส่วนตัว', 'เสื้อผ้า', 'ความบันเทิง', 'สุขภาพ', 'การศึกษา', 'การลงทุน', 'ให้ของขวัญ', 'สัตว์เลี้ยง', 'อื่นๆ'],
+            expense: ['อาหาร', 'เดินทาง', 'ที่อยู่อาศัย', 'บิล/สาธารณูปโภค', 'ของใช้ส่วนตัว', 'เสื้อผ้า', 'ความบันเทิง', 'สุขภาพ', 'การศึกษา', 'การลงทุน', 'ให้ของขวัญ', 'สัตว์เลี้ยง', 'เงินออม', 'อื่นๆ'],
             income: ['เงินเดือน', 'รายได้เสริม', 'จากการลงทุน', 'ของขวัญ', 'โบนัส', 'อื่นๆ']
         };
         
@@ -468,6 +488,7 @@
         const goalsModal = document.getElementById('goalsModal');
         const recurringModal = document.getElementById('recurringModal');
         const reportsModal = document.getElementById('reportsModal');
+        const addToGoalModal = document.getElementById('addToGoalModal');
         
         // Modal Buttons
         const openAddTransactionModalBtn = document.getElementById('openAddTransactionModal');
@@ -480,6 +501,7 @@
         // Forms
         const transactionForm = document.getElementById('transactionForm');
         const goalForm = document.getElementById('goalForm');
+        const addToGoalForm = document.getElementById('addToGoalForm');
         const goalsListEl = document.getElementById('goalsList');
         
         // --- CHART.JS SETUP ---
@@ -633,9 +655,10 @@
                         <span class="font-semibold">${goal.name}</span>
                         <span class="text-sm text-slate-600">${formatCurrency(goal.savedAmount)} / ${formatCurrency(goal.targetAmount)}</span>
                     </div>
-                    <div class="goal-progress-bar">
-                        <div class="goal-progress-fill" style="width: ${percentage}%;"></div>
+                    <div class="goal-progress-bar mb-2">
+                        <div class="goal-progress-fill" style="width: ${Math.min(percentage, 100)}%;"></div>
                     </div>
+                    <button data-goal-id="${goal.id}" class="add-savings-btn w-full text-sm bg-teal-100 text-teal-700 font-semibold py-1 px-3 rounded-md hover:bg-teal-200 transition">ออมเงิน</button>
                 `;
                 goalsListEl.appendChild(goalEl);
             });
@@ -888,6 +911,68 @@
                 goalForm.reset();
             }
         });
+
+        goalsListEl.addEventListener('click', (e) => {
+            if (e.target.classList.contains('add-savings-btn')) {
+                const goalId = e.target.dataset.goalId;
+                const goal = state.goals.find(g => g.id === goalId);
+                if (goal) {
+                    const form = document.getElementById('addToGoalForm');
+                    form.reset();
+                    document.getElementById('addToGoalName').textContent = goal.name;
+                    form.querySelector('[name="goalId"]').value = goalId;
+                    
+                    const accountSelect = form.querySelector('[name="account"]');
+                    accountSelect.innerHTML = '';
+                    state.accounts.forEach(acc => {
+                        const option = document.createElement('option');
+                        option.value = acc.name;
+                        option.textContent = acc.name;
+                        accountSelect.appendChild(option);
+                    });
+                    
+                    addToGoalModal.classList.add('show');
+                }
+            }
+        });
+
+        addToGoalForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const goalId = addToGoalForm.querySelector('[name="goalId"]').value;
+            const amount = parseFloat(addToGoalForm.querySelector('[name="amount"]').value);
+            const account = addToGoalForm.querySelector('[name="account"]').value;
+            
+            const goal = state.goals.find(g => g.id === goalId);
+
+            if (!goal || isNaN(amount) || amount <= 0) {
+                showMessage('ข้อมูลไม่ถูกต้อง', 'error');
+                return;
+            }
+
+            const transactionData = {
+                id: `tx-${Date.now()}`,
+                date: new Date().toISOString(),
+                type: 'expense',
+                description: `ออมเงิน: ${goal.name}`,
+                amount: amount,
+                category: 'เงินออม',
+                account: account
+            };
+
+            const goalUpdateData = {
+                id: goal.id,
+                savedAmount: parseFloat(goal.savedAmount) + amount
+            };
+            
+            const payload = { action: 'addSavingsToGoal', data: { transactionData, goalUpdateData } };
+            const success = await postData(payload);
+
+            if (success) {
+                addToGoalModal.classList.remove('show');
+                showMessage(`ออมเงินสำหรับ "${goal.name}" สำเร็จ!`);
+            }
+        });
+
 
         // --- APP INITIALIZATION ---
         const init = async () => {
