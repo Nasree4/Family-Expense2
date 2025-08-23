@@ -266,7 +266,7 @@
 
                 <!-- KPI Cards -->
                 <section>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                    <div class="grid grid-cols-1 sm:grid-cols-5 gap-6">
                         <div class="card text-center">
                             <h3 class="font-semibold text-slate-500">รายรับรวม</h3>
                             <p id="totalIncome" class="kpi-value kpi-income">0.00</p>
@@ -278,6 +278,14 @@
                         <div class="card text-center">
                             <h3 class="font-semibold text-slate-500">ยอดคงเหลือ</h3>
                             <p id="currentBalance" class="kpi-value kpi-balance">0.00</p>
+                        </div>
+                        <div class="card text-center">
+                            <h3 class="font-semibold text-slate-500">ยอดใช้เงินสด</h3>
+                            <p id="totalCashExpense" class="kpi-value text-gray-600">0.00</p>
+                        </div>
+                        <div class="card text-center">
+                            <h3 class="font-semibold text-slate-500">ยอดใช้บัตรเครดิต</h3>
+                            <p id="totalCreditExpense" class="kpi-value text-gray-600">0.00</p>
                         </div>
                     </div>
                 </section>
@@ -476,6 +484,8 @@
         const totalIncomeEl = document.getElementById('totalIncome');
         const totalExpenseEl = document.getElementById('totalExpense');
         const currentBalanceEl = document.getElementById('currentBalance');
+        const totalCashExpenseEl = document.getElementById('totalCashExpense');
+        const totalCreditExpenseEl = document.getElementById('totalCreditExpense');
         const transactionTableBody = document.getElementById('transactionTableBody');
         const dateRangePickerEl = document.getElementById('dateRangePicker');
         const accountFilterEl = document.getElementById('accountFilter');
@@ -608,10 +618,16 @@
 
         const renderKPIs = (transactions) => {
             const income = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-            const expense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+            const expenses = transactions.filter(t => t.type === 'expense');
+            const totalExpense = expenses.reduce((sum, t) => sum + t.amount, 0);
+            const cashExpense = expenses.filter(t => t.paymentMethod === 'เงินสด').reduce((sum, t) => sum + t.amount, 0);
+            const creditExpense = expenses.filter(t => t.paymentMethod === 'บัตรเครดิต').reduce((sum, t) => sum + t.amount, 0);
+
             totalIncomeEl.textContent = formatCurrency(income);
-            totalExpenseEl.textContent = formatCurrency(expense);
-            currentBalanceEl.textContent = formatCurrency(income - expense);
+            totalExpenseEl.textContent = formatCurrency(totalExpense);
+            currentBalanceEl.textContent = formatCurrency(income - totalExpense);
+            totalCashExpenseEl.textContent = formatCurrency(cashExpense);
+            totalCreditExpenseEl.textContent = formatCurrency(creditExpense);
         };
 
         const renderTransactionTable = (transactions) => {
@@ -673,10 +689,15 @@
             const dailyData = transactions.reduce((acc, t) => {
                 const date = new Date(t.date).toISOString().split('T')[0];
                 if (!acc[date]) {
-                    acc[date] = { income: 0, expense: 0, dateObj: new Date(t.date) };
+                    acc[date] = { income: 0, expense: 0, cashExpense: 0, creditExpense: 0, dateObj: new Date(t.date) };
                 }
-                if (t.type === 'income') acc[date].income += t.amount;
-                else acc[date].expense += t.amount;
+                if (t.type === 'income') {
+                    acc[date].income += t.amount;
+                } else {
+                    acc[date].expense += t.amount;
+                    if (t.paymentMethod === 'เงินสด') acc[date].cashExpense += t.amount;
+                    if (t.paymentMethod === 'บัตรเครดิต') acc[date].creditExpense += t.amount;
+                }
                 return acc;
             }, {});
             const sortedDates = Object.keys(dailyData).sort((a, b) => new Date(b) - new Date(a));
@@ -684,7 +705,7 @@
                 const data = dailyData[dateStr];
                 const balance = data.income - data.expense;
                 const card = document.createElement('div');
-                card.className = 'flex-shrink-0 w-64 bg-slate-50 p-4 rounded-lg border border-slate-200';
+                card.className = 'flex-shrink-0 w-72 bg-slate-50 p-4 rounded-lg border border-slate-200';
                 const formattedDate = data.dateObj.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short' });
                 card.innerHTML = `
                     <p class="font-bold text-slate-700">${formattedDate}</p>
@@ -696,6 +717,14 @@
                         <div class="flex justify-between text-sm">
                             <span class="text-slate-500">รายจ่าย:</span>
                             <span class="font-semibold text-orange-500">-${formatCurrency(data.expense)}</span>
+                        </div>
+                        <div class="pl-4 flex justify-between text-xs">
+                            <span class="text-slate-400">เงินสด:</span>
+                            <span class="font-medium text-slate-500">-${formatCurrency(data.cashExpense)}</span>
+                        </div>
+                        <div class="pl-4 flex justify-between text-xs">
+                            <span class="text-slate-400">บัตรเครดิต:</span>
+                            <span class="font-medium text-slate-500">-${formatCurrency(data.creditExpense)}</span>
                         </div>
                         <hr class="my-1 border-slate-200">
                         <div class="flex justify-between font-bold text-md">
@@ -965,7 +994,8 @@
                 description: `ออมเงิน: ${goal.name}`,
                 amount: amount,
                 category: 'เงินออม',
-                account: account
+                account: account,
+                paymentMethod: account === 'เงินสด' ? 'เงินสด' : 'บัตรเครดิต' // Simple logic
             };
 
             const goalUpdateData = {
