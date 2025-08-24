@@ -341,6 +341,7 @@
                                     <th class="p-3">รายการ</th>
                                     <th class="p-3">บัญชี</th>
                                     <th class="p-3">หมวดหมู่</th>
+                                    <th class="p-3">สมาชิก</th>
                                     <th class="p-3">ชำระด้วย</th>
                                     <th class="p-3 text-right">จำนวนเงิน</th>
                                     <th class="p-3 text-center">จัดการ</th>
@@ -370,6 +371,10 @@
                     </div>
                     <input type="hidden" name="type" id="transactionType" value="expense">
                 </div>
+                 <div>
+                    <label class="font-medium text-sm mb-1 block">วันที่</label>
+                    <input type="text" id="transactionDate" name="date" placeholder="เลือกวันที่..." class="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" required>
+                </div>
                 <div>
                     <label class="font-medium text-sm mb-1 block">คำอธิบาย</label>
                     <input type="text" name="description" placeholder="เช่น ค่ากาแฟ, เงินเดือน" class="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" required>
@@ -381,6 +386,10 @@
                 <div>
                     <label class="font-medium text-sm mb-1 block">หมวดหมู่</label>
                     <select name="category" class="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" required></select>
+                </div>
+                <div>
+                    <label class="font-medium text-sm mb-1 block">สมาชิก</label>
+                    <select name="member" class="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" required></select>
                 </div>
                 <div id="paymentMethodContainer">
                     <label class="font-medium text-sm mb-1 block">ชำระด้วย</label>
@@ -475,6 +484,7 @@
             expense: ['อาหาร', 'เดินทาง', 'ที่อยู่อาศัย', 'บิล/สาธารณูปโภค', 'ของใช้ส่วนตัว', 'เสื้อผ้า', 'ความบันเทิง', 'สุขภาพ', 'การศึกษา', 'การลงทุน', 'ให้ของขวัญ', 'สัตว์เลี้ยง', 'เงินออม', 'อื่นๆ'],
             income: ['เงินเดือน', 'รายได้เสริม', 'จากการลงทุน', 'ของขวัญ', 'โบนัส', 'อื่นๆ']
         };
+        const MEMBERS = ['พ่อ', 'แม่', 'ลูกชาย', 'ลูกสาว', 'ส่วนกลาง'];
         
         const today = new Date();
         const startDate = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -530,6 +540,7 @@
         
         // --- CHART.JS SETUP ---
         let summaryDoughnutChart, expenseDoughnutChart, dailyTrendBarChart, monthlyCompareChart;
+        let transactionDatepicker;
 
         // --- HELPER FUNCTIONS ---
         const showLoading = (show) => loadingOverlay.classList.toggle('hidden', !show);
@@ -659,6 +670,7 @@
                     <td class="p-3 font-medium text-slate-800">${t.description}</td>
                     <td class="p-3">${t.account || ''}</td>
                     <td class="p-3">${t.category}</td>
+                    <td class="p-3">${t.member || ''}</td>
                     <td class="p-3">${t.paymentMethod || ''}</td>
                     <td class="p-3 text-right font-semibold ${t.type === 'income' ? 'text-green-500' : 'text-orange-500'}">
                         ${t.type === 'income' ? '+' : '-'}${formatCurrency(t.amount)}
@@ -679,7 +691,7 @@
                 return;
             }
             state.goals.forEach(goal => {
-                const percentage = (goal.savedAmount / goal.targetAmount) * 100;
+                const percentage = (goal.targetAmount > 0) ? (goal.savedAmount / goal.targetAmount) * 100 : 0;
                 const goalEl = document.createElement('div');
                 goalEl.innerHTML = `
                     <div class="flex justify-between items-center mb-1">
@@ -800,15 +812,26 @@
                 option.textContent = acc.name;
                 accountSelect.appendChild(option);
             });
+            
+            const memberSelect = transactionForm.querySelector('[name="member"]');
+            memberSelect.innerHTML = '';
+            MEMBERS.forEach(m => {
+                const option = document.createElement('option');
+                option.value = m;
+                option.textContent = m;
+                memberSelect.appendChild(option);
+            });
 
             if (transactionId) {
                 document.getElementById('modalTitle').textContent = 'แก้ไขรายการ';
                 const t = state.transactions.find(t => t.id === transactionId);
                 if(t) {
                     updateTypeButtons(t.type);
+                    transactionDatepicker.setDate(t.date, true);
                     transactionForm.description.value = t.description;
                     transactionForm.account.value = t.account;
                     transactionForm.category.value = t.category;
+                    transactionForm.member.value = t.member;
                     transactionForm.amount.value = t.amount;
                     if(t.paymentMethod) {
                         transactionForm.querySelector(`input[name="paymentMethod"][value="${t.paymentMethod}"]`).checked = true;
@@ -817,6 +840,7 @@
             } else {
                 document.getElementById('modalTitle').textContent = 'เพิ่มรายการใหม่';
                 updateTypeButtons('expense');
+                transactionDatepicker.setDate(new Date(), true);
             }
             addTransactionModal.classList.add('show');
         };
@@ -882,7 +906,7 @@
             ]}, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { position: 'top' } } } });
         };
 
-        const initDatepicker = () => {
+        const initDatepickers = () => {
             flatpickr(dateRangePickerEl, {
                 mode: "range",
                 dateFormat: "Y-m-d",
@@ -894,6 +918,11 @@
                         renderAll();
                     }
                 },
+            });
+
+            transactionDatepicker = flatpickr("#transactionDate", {
+                dateFormat: "Y-m-d",
+                defaultDate: new Date()
             });
         };
 
@@ -928,14 +957,17 @@
             e.preventDefault();
             const isEditing = !!state.editingTransactionId;
             const type = transactionForm.querySelector('#transactionType').value;
+            const selectedDate = transactionForm.querySelector('[name="date"]')._flatpickr.selectedDates[0];
+
             const transactionData = {
                 id: isEditing ? state.editingTransactionId : `tx-${Date.now()}`,
-                date: isEditing ? state.transactions.find(t => t.id === state.editingTransactionId).date : new Date().toISOString(),
+                date: selectedDate ? selectedDate.toISOString() : new Date().toISOString(),
                 type: type,
                 description: transactionForm.querySelector('[name="description"]').value,
                 amount: parseFloat(transactionForm.querySelector('[name="amount"]').value),
                 category: transactionForm.querySelector('[name="category"]').value,
                 account: transactionForm.querySelector('[name="account"]').value,
+                member: transactionForm.querySelector('[name="member"]').value,
                 paymentMethod: type === 'expense' ? transactionForm.querySelector('[name="paymentMethod"]:checked').value : ''
             };
             const payload = { sheetName: 'Transactions', action: isEditing ? 'edit' : 'add', data: transactionData };
@@ -1018,6 +1050,7 @@
                 amount: amount,
                 category: 'เงินออม',
                 account: account,
+                member: 'ส่วนกลาง',
                 paymentMethod: account === 'เงินสด' ? 'เงินสด' : 'บัตรเครดิต' // Simple logic
             };
 
@@ -1039,7 +1072,7 @@
         // --- APP INITIALIZATION ---
         const init = async () => {
             initCharts();
-            initDatepicker();
+            initDatepickers();
             await loadData();
         };
 
