@@ -291,7 +291,7 @@
                 </section>
 
                 <!-- Charts Section -->
-                <section class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-8">
                     <div class="card">
                         <h3 class="font-semibold text-slate-800 mb-4 text-lg">สรุปยอดรวม</h3>
                         <p class="text-sm text-slate-500 mb-4">สัดส่วนรายรับเทียบกับรายจ่ายทั้งหมดในช่วงวันที่เลือก</p>
@@ -301,14 +301,21 @@
                     </div>
                     <div class="card">
                         <h3 class="font-semibold text-slate-800 mb-4 text-lg">สัดส่วนรายจ่าย</h3>
-                        <p class="text-sm text-slate-500 mb-4">แสดงสัดส่วนการใช้เงินในแต่ละหมวดหมู่ เพื่อช่วยให้คุณเข้าใจพฤติกรรมการใช้จ่าย</p>
+                        <p class="text-sm text-slate-500 mb-4">แสดงสัดส่วนการใช้เงินในแต่ละหมวดหมู่</p>
                         <div class="chart-container">
                             <canvas id="expenseDoughnutChart"></canvas>
                         </div>
                     </div>
                     <div class="card">
+                        <h3 class="font-semibold text-slate-800 mb-4 text-lg">สัดส่วนตามสมาชิก</h3>
+                        <p class="text-sm text-slate-500 mb-4">แสดงสัดส่วนการใช้จ่ายของสมาชิกแต่ละคน</p>
+                        <div class="chart-container">
+                            <canvas id="memberExpenseChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
                         <h3 class="font-semibold text-slate-800 mb-4 text-lg">แนวโน้มรายวัน</h3>
-                         <p class="text-sm text-slate-500 mb-4">เปรียบเทียบยอดรวมรายรับ-รายจ่ายในแต่ละวัน เพื่อให้เห็นภาพรวมกระแสเงินสด</p>
+                         <p class="text-sm text-slate-500 mb-4">เปรียบเทียบยอดรวมรายรับ-รายจ่ายในแต่ละวัน</p>
                         <div class="chart-container">
                             <canvas id="dailyTrendBarChart"></canvas>
                         </div>
@@ -539,7 +546,7 @@
         const goalsListEl = document.getElementById('goalsList');
         
         // --- CHART.JS SETUP ---
-        let summaryDoughnutChart, expenseDoughnutChart, dailyTrendBarChart, monthlyCompareChart;
+        let summaryDoughnutChart, expenseDoughnutChart, dailyTrendBarChart, memberExpenseChart, monthlyCompareChart;
         let transactionDatepicker;
 
         // --- HELPER FUNCTIONS ---
@@ -658,7 +665,7 @@
         const renderTransactionTable = (transactions) => {
             transactionTableBody.innerHTML = '';
             if (transactions.length === 0) {
-                transactionTableBody.innerHTML = `<tr><td colspan="7" class="text-center p-4 text-slate-500">ไม่พบรายการ...</td></tr>`;
+                transactionTableBody.innerHTML = `<tr><td colspan="8" class="text-center p-4 text-slate-500">ไม่พบรายการ...</td></tr>`;
                 return;
             }
             const sorted = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -783,6 +790,17 @@
                 expenseDoughnutChart.data.datasets[0].backgroundColor = labels.map((_, i) => PREDEFINED_COLORS[i % PREDEFINED_COLORS.length]);
                 expenseDoughnutChart.update();
             }
+            
+            const memberData = transactions.filter(t => t.type === 'expense' && t.member).reduce((acc, t) => { acc[t.member] = (acc[t.member] || 0) + t.amount; return acc; }, {});
+            if (memberExpenseChart) {
+                const labels = Object.keys(memberData);
+                const data = Object.values(memberData);
+                const PREDEFINED_COLORS = ['#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B'];
+                memberExpenseChart.data.labels = labels;
+                memberExpenseChart.data.datasets[0].data = data;
+                memberExpenseChart.data.datasets[0].backgroundColor = labels.map((_, i) => PREDEFINED_COLORS[i % PREDEFINED_COLORS.length]);
+                memberExpenseChart.update();
+            }
 
             const dailyData = transactions.reduce((acc, t) => {
                 const date = new Date(t.date).toISOString().split('T')[0];
@@ -888,6 +906,19 @@
 
             const expenseCtx = document.getElementById('expenseDoughnutChart').getContext('2d');
             expenseDoughnutChart = new Chart(expenseCtx, { type: 'doughnut', data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' }, tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        const label = context.label || '';
+                        const value = context.raw || 0;
+                        const total = context.chart.getDatasetMeta(0).total || 1;
+                        const percentage = ((value / total) * 100).toFixed(2);
+                        return `${label}: ${formatCurrency(value)} (${percentage}%)`;
+                    }
+                }
+            } } } });
+
+            const memberCtx = document.getElementById('memberExpenseChart').getContext('2d');
+            memberExpenseChart = new Chart(memberCtx, { type: 'doughnut', data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' }, tooltip: {
                 callbacks: {
                     label: function(context) {
                         const label = context.label || '';
