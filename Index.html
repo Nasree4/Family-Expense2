@@ -276,7 +276,7 @@
                             <p id="totalExpense" class="kpi-value kpi-expense">0.00</p>
                         </div>
                         <div class="card text-center">
-                            <h3 class="font-semibold text-slate-500">ยอดคงเหลือ</h3>
+                            <h3 class="font-semibold text-slate-500">ยอดคงเหลือ (เงินสด)</h3>
                             <p id="currentBalance" class="kpi-value kpi-balance">0.00</p>
                         </div>
                         <div class="card text-center">
@@ -487,24 +487,19 @@
         const CACHE_KEY = 'finance_data_cache_v2';
         const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
-        const CATEGORIES = {
-            expense: ['อาหาร', 'เดินทาง', 'ที่อยู่อาศัย', 'บิล/สาธารณูปโภค', 'ของใช้ส่วนตัว', 'เสื้อผ้า', 'ความบันเทิง', 'สุขภาพ', 'การศึกษา', 'การลงทุน', 'ให้ของขวัญ', 'สัตว์เลี้ยง', 'เงินออม', 'อื่นๆ'],
-            income: ['เงินเดือน', 'รายได้เสริม', 'จากการลงทุน', 'ของขวัญ', 'โบนัส', 'อื่นๆ']
-        };
-        const MEMBERS = ['พ่อ', 'แม่', 'ลูกชาย', 'ลูกสาว', 'ส่วนกลาง'];
-        
-        const today = new Date();
-        const startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-        const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-
         let state = {
             transactions: [],
             accounts: [],
             goals: [],
             recurring: [],
+            config: {
+                expense: [],
+                income: [],
+                members: []
+            },
             currentFilter: {
-                startDate: startDate,
-                endDate: endDate,
+                startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+                endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0),
                 account: 'all'
             },
             editingTransactionId: null
@@ -564,18 +559,27 @@
         const postData = async (payload) => {
             showLoading(true);
             try {
-                await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload), headers: {'Content-Type': 'text/plain;charset=utf-8'} });
-                localStorage.removeItem(CACHE_KEY);
-                return true;
+                const response = await fetch(SCRIPT_URL, { 
+                    method: 'POST', 
+                    body: JSON.stringify(payload), 
+                    headers: {'Content-Type': 'application/json'}
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    localStorage.removeItem(CACHE_KEY);
+                    await fetchFreshData(false);
+                    return true;
+                } else {
+                    throw new Error(result.message);
+                }
             } catch (error) {
                 console.error('Failed to post data:', error);
-                showMessage('เกิดข้อผิดพลาดในการส่งข้อมูล', 'error');
+                showMessage(`เกิดข้อผิดพลาด: ${error.message}`, 'error');
                 return false;
             } finally {
-                setTimeout(() => {
-                    fetchFreshData(false);
-                    showLoading(false);
-                }, 2500);
+                showLoading(false);
             }
         };
         
@@ -591,6 +595,7 @@
                 state.accounts = data.accounts.map(a => ({ ...a, initialBalance: parseFloat(a.initialBalance) || 0 }));
                 state.goals = data.goals.map(g => ({ ...g, targetAmount: parseFloat(g.targetAmount) || 0, savedAmount: parseFloat(g.savedAmount) || 0 }));
                 state.recurring = data.recurring;
+                state.config = data.config;
                 
                 localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: new Date().getTime(), ...data }));
                 
@@ -657,7 +662,7 @@
 
             totalIncomeEl.textContent = formatCurrency(income);
             totalExpenseEl.textContent = formatCurrency(totalExpense);
-            currentBalanceEl.textContent = formatCurrency(income - totalExpense);
+            currentBalanceEl.textContent = formatCurrency(income - cashExpense); // Balance based on cash expense
             totalCashExpenseEl.textContent = formatCurrency(cashExpense);
             totalCreditExpenseEl.textContent = formatCurrency(creditExpense);
         };
@@ -833,7 +838,7 @@
             
             const memberSelect = transactionForm.querySelector('[name="member"]');
             memberSelect.innerHTML = '';
-            MEMBERS.forEach(m => {
+            (state.config.members || []).forEach(m => {
                 const option = document.createElement('option');
                 option.value = m;
                 option.textContent = m;
@@ -880,12 +885,23 @@
             }
             
             categorySelect.innerHTML = '';
-            CATEGORIES[type].forEach(cat => {
+            const categories = type === 'income' ? state.config.income : state.config.expense;
+            (categories || []).forEach(cat => {
                 const option = document.createElement('option');
                 option.value = cat;
                 option.textContent = cat;
                 categorySelect.appendChild(option);
             });
+        };
+
+        const handleDelete = async (id) => {
+            if (confirm('คุณแน่ใจหรือไม่ว่าต้องการลบรายการนี้?')) {
+                const payload = { sheetName: 'Transactions', action: 'delete', id: id };
+                const success = await postData(payload);
+                if (success) {
+                    showMessage('ลบรายการสำเร็จ!', 'success');
+                }
+            }
         };
 
         // --- INITIALIZATION & EVENT LISTENERS ---
@@ -980,7 +996,7 @@
                 openTransactionModal(e.target.dataset.id);
             }
             if (e.target.classList.contains('delete-btn')) {
-                // Add handleDelete logic here if needed
+                handleDelete(e.target.dataset.id);
             }
         });
 
@@ -1087,7 +1103,7 @@
 
             const goalUpdateData = {
                 id: goal.id,
-                savedAmount: parseFloat(goal.savedAmount) + amount
+                amountToAdd: amount
             };
             
             const payload = { action: 'addSavingsToGoal', data: { transactionData, goalUpdateData } };
